@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# grab-shot: Save any image currently on the Windows clipboard into a directory
+# in the current project. Works on WSL2/Ubuntu by calling powershell.exe to pull
+# the image off the Windows clipboard. Any capture tool works (Snipping Tool,
+# Win+Shift+S, ShareX, browser "Copy image", etc.) as long as it puts an image
+# on the clipboard.
+#
+# Usage:
+#   grab-shot                      # <default-dir>/screenshot_TIMESTAMP.png
+#   grab-shot bob                  # <default-dir>/bob.png
+#   grab-shot notes/bob            # notes/bob.png    (dir + name from path)
+#   grab-shot sub/dir/shot.png     # sub/dir/shot.png
+#   grab-shot -D <dir>             # change the baked-in default directory on this machine
+
+# --- Default directory (grab-shot -D rewrites this line; do not edit the format) ---
+dir_default=".info"
+
+# --- Self-rewrite: grab-shot -D <new-default> -------------------------------
+if [ "${1:-}" = "-D" ]; then
+  new_default="${2:-}"
+  if [ -z "$new_default" ]; then
+    echo "Usage: grab-shot -D <new-default-directory>"
+    exit 1
+  fi
+  self=$(readlink -f "$0")
+  escaped=$(printf '%s' "$new_default" | sed 's|[\\&|]|\\&|g')
+  sed -i "s|^dir_default=.*|dir_default=\"$escaped\"|" "$self"
+  echo "Default directory set to: $new_default"
+  echo "Updated: $self"
+  exit 0
+fi
+
+# Reject any other unknown flag so typos like '-d foo' don't silently become a filename
+if [[ "${1:-}" == -* ]]; then
+  echo "Usage: grab-shot [name|dir/name]"
+  echo "       grab-shot -D <new-default-directory>"
+  exit 1
+fi
+
+# --- Parse positional: [name | dir/name] ------------------------------------
+arg="${1:-}"
+if [ -z "$arg" ]; then
+  dir="$dir_default"
+  name="screenshot_$(date +%Y%m%d_%H%M%S)"
+elif [[ "$arg" == */* ]]; then
+  dir="$(dirname "$arg")"
+  name="$(basename "$arg")"
+else
+  dir="$dir_default"
+  name="$arg"
+fi
+
+mkdir -p "$dir"
+outfile="$dir/${name%.png}.png"
+winpath=$(wslpath -w "$(pwd)/$outfile")
+
+powershell.exe -NoProfile -NonInteractive -Command "
+  Add-Type -AssemblyName System.Windows.Forms
+  \$img = [System.Windows.Forms.Clipboard]::GetImage()
+  if (\$img) { \$img.Save('$winpath'); exit 0 } else { exit 1 }
+"
+
+if [ $? -eq 0 ] && [ -f "$outfile" ]; then
+  echo "Saved: $outfile"
+else
+  echo "No image on the clipboard. Capture one first (Snipping Tool, Win+Shift+S, etc.)."
+  exit 1
+fi
