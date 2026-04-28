@@ -78,6 +78,17 @@ if [ -n "$short_name" ]; then
   fi
 fi
 
+# --- Aliases ---------------------------------------------------------------
+for alias_name in info-paste paste-info; do
+  link="$bin_dir/$alias_name"
+  if [ -e "$link" ] && [ "$force" -ne 1 ]; then
+    echo "NOTE: $link already exists. Re-run with -f to overwrite."
+  else
+    ln -sf "$dest" "$link"
+    echo "Symlink created: $link -> $dest"
+  fi
+done
+
 # --- PATH check ------------------------------------------------------------
 case ":$PATH:" in
   *":$bin_dir:"*) ;;
